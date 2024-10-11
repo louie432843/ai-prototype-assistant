@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Prototyper App</title>
+    <style>
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+    display: flex;
+    background-color: #f4f4f4;
+    color: #333;
+}
+#main-content {
+    flex: 1;
+    background-color: #fff;
+    padding: 30px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+}
+#model-selection {
+    width: 300px;
+    padding-left: 20px;
+}
+h1 {
+    text-align: center;
+    color: #0078D4;
+}
+h2 {
+    text-align: center;
+    color: #333;
+}
+.section {
+    margin-bottom: 30px;
+}
+textarea, input[type="text"], select {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 15px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 1rem;
+}
+button {
+    padding: 12px 24px;
+    margin-right: 15px;
+    font-size: 1rem;
+    background-color: #0078D4;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+button:hover {
+    background-color: #005A9E;
+}
+#output, #validation {
+    margin-top: 20px;
+    padding: 15px;
+    background-color: #f9f9f9;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+}
+#output a {
+    text-decoration: none;
+    color: #0078D4;
+}
+#output a:hover {
+    text-decoration: underline;
+}
+label {
+    font-weight: bold;
+    display: block;
+    margin-bottom: 5px;
+}
+    </style>
+</head>
+<body>
+    <div id="main-content">
+        <h1>Prototyper App</h1>
+        <div class="section">
+            <h2>New Project</h2>
+            <label for="project-name">Project Name:</label>
+            <input type="text" id="project-name"><br><br>
+            
+            <label for="requirements">Enter Requirements:</label>
+            <textarea id="requirements" placeholder="Describe your product requirements here..."></textarea>
+            
+            <button onclick="optimizeRequirements()">Optimize Requirements</button>
+            <button onclick="generatePrototype()">Generate Prototype</button>
+        </div>
+
+        <div class="section">
+            <h2>Prompts</h2>
+            <label for="optimization-prompt">Optimization Prompt:</label>
+            <textarea id="optimization-prompt"></textarea>
+
+            <label for="generation-prompt">Generation Prompt:</label>
+            <textarea id="generation-prompt"></textarea>
+
+            <label for="validation-prompt">Validation Prompt:</label>
+            <textarea id="validation-prompt"></textarea>
+        </div>
+
+        <div class="section">
+            <h2>Output</h2>
+            <div id="output"></div>
+        </div>
+
+        <div class="section">
+            <h2>Validation and Improvement Results</h2>
+            <div id="validation"></div>
+        </div>
+
+        <div class="section">
+            <h2>Generated Prototypes</h2>
+            <div id="prototypes"></div>
+        </div>
+    </div>
+
+    <div id="model-selection">
+        <h2>Model Selection</h2>
+        <label for="model-host">Model Host:</label>
+        <select id="model-host" onchange="fetchAvailableModels()">
+            <option value="null">Choose a model</option>
+            <option value="ollama">Local (Ollama)</option>
+            <option value="openai">OpenAI</option>
+           
+        </select>
+
+        <label for="api-key">OpenAI API Key:</label>
+        <input type="text" id="api-key" placeholder="Enter OpenAI API key if using OpenAI"><br>
+
+        <label for="optimize-model">Optimization Model:</label>
+        <select id="optimize-model"></select>
+
+        <label for="prototype-model">Prototype Model:</label>
+        <select id="prototype-model"></select>
+
+        <label for="validate-model">Validation Model:</label>
+        <select id="validate-model"></select>
+    </div>
+
+    <script>
+        let availableModels = [];
+
+        const defaultOptimizationPrompt = `
+            Optimize the following product requirements for prototyping. Be specific and technical where needed, with clear details on functionality, layout, and features...
+        `;
+        const defaultGenerationPrompt = `
+            Generate a functional HTML, CSS, and JavaScript prototype based on the following requirements...
+        `;
+        const defaultValidationPrompt = `
+            Here is a generated prototype code based on the provided requirements. Review and make any necessary improvements to ensure it meets all requirements, has no bugs, and is fully functional.
+            
+            Return an updated version of the prototype code, with improvements as needed. Start with <!DOCTYPE html> and include only valid HTML, CSS, and JavaScript. Ensure any bugs are fixed, and that the requirements are fully met.
+        `;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('optimization-prompt').value = defaultOptimizationPrompt;
+            document.getElementById('generation-prompt').value = defaultGenerationPrompt;
+            document.getElementById('validation-prompt').value = defaultValidationPrompt;
+         
+        });
+
+        async function fetchAvailableModels() {
+            const modelHost = document.getElementById('model-host').value;
+            const apiKey = document.getElementById('api-key').value;
+            let url = '';
+            let headers = {};
+
+            if (modelHost === 'openai') {
+                if (!apiKey) {
+                    alert("Please provide an OpenAI API key.");
+                    return;
+                }
+                url = 'https://api.openai.com/v1/models';
+                headers = {
+                    'Authorization': `Bearer ${apiKey}`
+                };
+            } else if (modelHost === 'ollama') {
+                url = 'http://localhost:11434/api/tags';
+            }
+
+            try {
+                const response = await fetch(url, { headers });
+                if (!response.ok) throw new Error("Failed to fetch models");
+                const data = await response.json();
+                availableModels = modelHost === 'openai' ? data.data.map(model => model.id) : data.models.map(model => model.name);
+                populateModelDropdowns();
+            } catch (error) {
+                alert(`Error loading models: ${error.message}`);
+            }
+        }
+
+        function populateModelDropdowns() {
+            const optimizeModelDropdown = document.getElementById('optimize-model');
+            const prototypeModelDropdown = document.getElementById('prototype-model');
+            const validateModelDropdown = document.getElementById('validate-model');
+
+            [optimizeModelDropdown, prototypeModelDropdown, validateModelDropdown].forEach(dropdown => dropdown.innerHTML = '');
+
+            availableModels.forEach(model => {
+                const option1 = document.createElement('option');
+                const option2 = document.createElement('option');
+                const option3 = document.createElement('option');
+
+                option1.value = model;
+                option1.text = model;
+                option2.value = model;
+                option2.text = model;
+                option3.value = model;
+                option3.text = model;
+
+                optimizeModelDropdown.appendChild(option1);
+                prototypeModelDropdown.appendChild(option2);
+                validateModelDropdown.appendChild(option3);
+            });
+        }
+
+        function getSelectedModel(step) {
+            const model = document.getElementById(`${step}-model`).value;
+            if (!model) {
+                alert(`Please select a model for ${step}`);
+                return null;
+            }
+            return model;
+        }
+
+        async function callApi(prompt, content, model) {
+            const modelHost = document.getElementById('model-host').value;
+            const apiKey = document.getElementById('api-key').value;
+            let url = '';
+            let body = {};
+            let headers = {
+                'Content-Type': 'application/json'
+            };
+
+            if (modelHost === 'openai') {
+                if (!apiKey) {
+                    alert("Please provide an OpenAI API key.");
+                    return "";
+                }
+                url = 'https://api.openai.com/v1/chat/completions';
+                headers['Authorization'] = `Bearer ${apiKey}`;
+                body = {
+                    model: model,
+                    messages: [
+                        { role: 'system', content: prompt },
+                        { role: 'user', content: content }
+                    ],
+                    max_tokens: 4096,
+                    temperature: 0.5
+                };
+            } else if (modelHost === 'ollama') {
+                url = `http://localhost:11434/api/chat`;
+                body = {
+                    model: model,
+                    messages: [
+                        { role: 'system', content: prompt },
+                        { role: 'user', content: content }
+                    ],
+                };
+            }
+
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify(body)
+                });
+                if (!response.ok) throw new Error("Failed to complete API call");
+                const data = await response.json();
+                return modelHost === 'openai' ? data.choices[0].message.content : data.generated_text;
+            } catch (error) {
+                alert(`API error: ${error.message}`);
+                return "";
+            }
+        }
+
+        async function optimizeRequirements() {
+            const requirements = document.getElementById('requirements').value;
+            const optimizeModel = getSelectedModel('optimize');
+            if (!optimizeModel) return;
+            const prompt = document.getElementById('optimization-prompt').value;
+            const optimizedRequirements = await callApi(prompt, requirements, optimizeModel);
+            document.getElementById('requirements').value = optimizedRequirements;
+        }
+
+        async function generatePrototype() {
+            const requirements = document.getElementById('requirements').value;
+            const projectName = document.getElementById('project-name').value.replace(/\s+/g, '_');
+            const prototypeModel = getSelectedModel('prototype');
+            if (!prototypeModel) return;
+            const prompt = document.getElementById('generation-prompt').value;
+
+            const prototypeCode = await callApi(prompt, requirements, prototypeModel);
+            if (!prototypeCode) return;
+            const filteredCode = prototypeCode.match(/<!DOCTYPE html[\s\S]*<\/html>/i);
+            const htmlContent = filteredCode ? filteredCode[0] : '';
+
+            const improvedPrototypeCode = await validateAndImprovePrototype(requirements, htmlContent);
+
+            if (improvedPrototypeCode) {
+                const blob = new Blob([improvedPrototypeCode], { type: 'text/html' });
+                const fileName = `${projectName || 'improved_prototype'}.html`;
+
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = fileName;
+                link.textContent = fileName;
+                document.getElementById('output').appendChild(link);
+                document.getElementById('output').appendChild(document.createElement('br'));
+            }
+        }
+
+        async function validateAndImprovePrototype(requirements, prototypeCode) {
+            const validateModel = getSelectedModel('validate');
+            if (!validateModel) return "";
+            const prompt = document.getElementById('validation-prompt').value;
+            const validationContent = `
+                Requirements: 
+                ${requirements}
+                PrototypeCode: 
+                ${prototypeCode}
+            `;
+
+            const improvedCode = await callApi(prompt, validationContent, validateModel);
+            document.getElementById('validation').innerText = "Prototype improved and ready for download.";
+
+            const improvedHtmlContent = improvedCode.match(/<!DOCTYPE html[\s\S]*<\/html>/i);
+            return improvedHtmlContent ? improvedHtmlContent[0] : '';
+        }
+    </script>
+</body>
+</html>
